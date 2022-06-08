@@ -24,7 +24,7 @@ import com.ibm.wala.classLoader.ProgramCounter;
 public class JSCallGraphDriver {
 
 	/**
-	 * Usage: JSCallGraphDriver path_to_js_file
+	 * Usage: JSCallGraphDriver path_to_js_file path_to_output_txt_file
 	 * @param args
 	 * @throws WalaException 
 	 * @throws CancelException 
@@ -33,7 +33,6 @@ public class JSCallGraphDriver {
 	 */
 	public static void main(String[] args) throws IllegalArgumentException, IOException, CancelException, WalaException {
 		Path inPath = Paths.get(args[0]);
-		Path outPath = Paths.get(args[1]);
 		JSCallGraphUtil.setTranslatorFactory(new CAstRhinoTranslatorFactory());
 		CallGraph CG = JSCallGraphBuilderUtil.makeScriptCG(
 				inPath.getParent().toString(), inPath.getFileName().toString());
