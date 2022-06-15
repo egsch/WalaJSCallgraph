@@ -19,7 +19,11 @@
   <artifactId>com.ibm.wala.cast.js.rhino</artifactId>
   <version>1.5.7</version>
 </dependency>
-
+<dependency>
+    <groupId>info.picocli</groupId>
+    <artifactId>picocli</artifactId>
+    <version>3.9.6</version>
+</dependency>
   </dependencies>
   <properties>
   	<maven.compiler.source>1.8</maven.compiler.source>
