@@ -8,6 +8,14 @@ function myFirstFunction(a) {
     return y;
 }
 
+function myThirdFunction(myFunc) {
+    myFunc()
+}
+
+var arr = [];
+var yes = arr.isArray();
+myThirdFunction(myFirstFunction);
+
 myFirstFunction();
 
 /* class MyClass {

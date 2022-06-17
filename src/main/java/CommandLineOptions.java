@@ -60,6 +60,7 @@ public class CommandLineOptions {
     // TODO: add actual description below
     @Option(
             names = "--handleCallApply",
+            defaultValue = "true",
             description =
                     "Should call graph construction handle "
                             + "call apply? Does not affect ONE_CFA algorithm.")
@@ -67,6 +68,7 @@ public class CommandLineOptions {
 
     @Option(
             names = "--enableCorrelationTracking",
+            defaultValue = "true",
             description =
                     "Should call graph construction include "
                             + "correlation tracking? Does not affect ONE_CFA algorithm.")
