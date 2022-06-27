@@ -16,7 +16,7 @@ public class CommandLineOptions {
     @Option(
             names = "--reflectionSetting",
             description = "Valid values: ${COMPLETION-CANDIDATES}",
-            defaultValue = "NONE")
+            defaultValue = "FULL")
     public ReflectionOptions reflection;
 
     // TODO: Rework config to allow direct setting of reflection options.
@@ -63,7 +63,7 @@ public class CommandLineOptions {
             defaultValue = "true",
             description =
                     "Should call graph construction handle "
-                            + "call apply? Does not affect ONE_CFA algorithm.")
+                            + "call apply?")
     public boolean handleCallApply;
 
     @Option(
@@ -71,7 +71,7 @@ public class CommandLineOptions {
             defaultValue = "true",
             description =
                     "Should call graph construction include "
-                            + "correlation tracking? Does not affect ONE_CFA algorithm.")
+                            + "correlation tracking?")
     public boolean enableCorrelationTracking;
     
     @Option(

@@ -4,13 +4,13 @@
  */
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.io.FileWriter;
 import java.util.Iterator;
 
+import com.ibm.wala.cast.ipa.callgraph.StandardFunctionTargetSelector;
 import com.ibm.wala.cast.ir.ssa.AstIRFactory;
 import com.ibm.wala.cast.js.ipa.callgraph.JSAnalysisOptions;
 import com.ibm.wala.cast.js.ipa.callgraph.JSCFABuilder;
@@ -22,23 +22,23 @@ import com.ibm.wala.cast.js.util.JSCallGraphBuilderUtil;
 import com.ibm.wala.cast.js.util.JSCallGraphBuilderUtil.CGBuilderType;
 import com.ibm.wala.cast.tree.rewrite.CAstRewriterFactory;
 import com.ibm.wala.cast.js.ipa.callgraph.JSZeroOrOneXCFABuilder;
+import com.ibm.wala.cast.js.ipa.callgraph.LoadFileTargetSelector;
 import com.ibm.wala.cast.js.ipa.callgraph.PropertyNameContextSelector;
 import com.ibm.wala.cast.js.ipa.callgraph.correlations.extraction.CorrelatedPairExtractorFactory;
+import com.ibm.wala.ipa.callgraph.AnalysisOptions;
 import com.ibm.wala.ipa.callgraph.AnalysisScope;
 import com.ibm.wala.ipa.callgraph.CGNode;
 import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ipa.callgraph.CallGraphStats;
 import com.ibm.wala.ipa.callgraph.ClassTargetSelector;
-import com.ibm.wala.ipa.callgraph.ContextSelector;
 import com.ibm.wala.ipa.callgraph.Entrypoint;
 import com.ibm.wala.ipa.callgraph.IAnalysisCacheView;
 import com.ibm.wala.ipa.callgraph.MethodTargetSelector;
 import com.ibm.wala.ipa.callgraph.impl.ClassHierarchyClassTargetSelector;
 import com.ibm.wala.ipa.callgraph.impl.ClassHierarchyMethodTargetSelector;
+import com.ibm.wala.ipa.callgraph.impl.Util;
 import com.ibm.wala.ssa.IRFactory;
-import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions;
 import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys;
-import com.ibm.wala.ipa.cha.ClassHierarchyException;
 import com.ibm.wala.ipa.cha.IClassHierarchy;
 import com.ibm.wala.ssa.SSAInstruction;
 import com.ibm.wala.util.CancelException;
@@ -50,6 +50,7 @@ import picocli.CommandLine;
 import com.ibm.wala.classLoader.CallSiteReference;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.classLoader.ProgramCounter;
+import com.ibm.wala.classLoader.SourceModule;
 
 public class JSCallGraphDriver {
 
@@ -77,48 +78,37 @@ public class JSCallGraphDriver {
         }
 		// Set up JS Call Graph Builder
         Path inPath = Paths.get(clo.scriptPath);
-		URL scripts = inPath.toUri().toURL();
-		JSCallGraphUtil.setTranslatorFactory(new CAstRhinoTranslatorFactory());
-		CAstRewriterFactory<?, ?> preprocessor =
+        ClassLoader loader = JSCallGraphBuilderUtil.class.getClassLoader();
+        URL script = JSCallGraphBuilderUtil.getURLforFile(inPath.getParent().toString(), inPath.getFileName().toString(), loader);
+        JSCallGraphUtil.setTranslatorFactory(new CAstRhinoTranslatorFactory());
+        CAstRewriterFactory<?, ?> preprocessor =
 		        clo.enableCorrelationTracking
-		            ? new CorrelatedPairExtractorFactory(JSCallGraphUtil.getTranslatorFactory(), scripts)
+		            ? new CorrelatedPairExtractorFactory(JSCallGraphBuilderUtil.translatorFactory, script)
 		            : null;
 		JavaScriptLoaderFactory loaders = JSCallGraphBuilderUtil.makeLoaders(preprocessor);
-		AnalysisScope scope = JSCallGraphBuilderUtil.makeScope(JSCallGraphBuilderUtil.makeSourceModules(inPath.getParent().toString(), inPath.getFileName().toString(), JSCallGraphBuilderUtil.class.getClassLoader()), loaders, JavaScriptLoader.JS);
+		AnalysisScope scope = JSCallGraphBuilderUtil.makeScriptScope(inPath.getParent().toString(), inPath.getFileName().toString(), loaders, loader);
+		IRFactory<IMethod> irFactory = AstIRFactory.makeDefaultFactory();
 		IClassHierarchy cha = JSCallGraphBuilderUtil.makeHierarchy(scope, loaders);
 		Iterable<Entrypoint> e = JSCallGraphBuilderUtil.makeScriptRoots(cha);
-		JSAnalysisOptions options = new JSAnalysisOptions(scope, e);
-		IRFactory<IMethod> irFactory = AstIRFactory.makeDefaultFactory();
+		JSAnalysisOptions options = JSCallGraphBuilderUtil.makeOptions(scope, cha, e);
 		IAnalysisCacheView cache = JSCallGraphBuilderUtil.makeCache(irFactory);
 		//Set options
-		options.setReflectionOptions(clo.reflection);
-		options.setHandleStaticInit(clo.handleStaticInit);
-		options.setHandleZeroLengthArray(clo.handleZeroLengthArray);
-		options.setUseStacksForLexicalScoping(clo.useStacksForLexicalScoping);
-		options.setUseLexicalScopingForGlobals(clo.useLexicalScopingForGlobals);
+	    options.setHandleCallApply(clo.handleCallApply);
 		options.setMaxNumberOfNodes(clo.maxNumberOfNodes);
-		options.setHandleCallApply(clo.handleCallApply);
-		ClassTargetSelector classTargetSelector = new ClassHierarchyClassTargetSelector(cha);
-		options.setSelector(classTargetSelector);
-		MethodTargetSelector methodTargetSelector = new ClassHierarchyMethodTargetSelector(cha);
-		options.setSelector(methodTargetSelector);
-		/*
-		 * Options.set methods that are not implemented in clo:
-		 *  (I do not know yet if any of these are applicable to JavaScript,
-		 *   or to this project in general)
-		 * options.setTraceStringConstants(true);
-		 * options.setMaxEvalBetweenTopo(0);
-		 * options.setMinEquationsForTopSort(0);
-		 * options.setSSAOptions(null);
-		 * options.setSelector(null);
-		 * options.setUseLoadFileTargetSelector(true);
-		 * options.setUseConstantSpecificKeys(false);
-		 * options.setUseLoadFileTargetSelector(false);
-		 * 
-		 */
+		options.setUseConstantSpecificKeys(clo.useConstantSpecificKeys);
+		// The below options do not seem to have an effect on JavaScript analysis:
+		//options.setReflectionOptions(AnalysisOptions.ReflectionOptions.NONE);
+		//options.setHandleStaticInit(clo.handleStaticInit);
+		//options.setHandleZeroLengthArray(clo.handleZeroLengthArray);
+		//options.setUseStacksForLexicalScoping(false);
+		//options.setUseLexicalScopingForGlobals(true);
+		//options.setTraceStringConstants(false);
+		//options.setMaxEvalBetweenTopo(0);
+		//options.setMinEquationsForTopSort(100);
+		//options.setUseLoadFileTargetSelector(false);
 		
-		JSCFABuilder builder;
-		switch(clo.callGraphBuilder) {
+	    JSCFABuilder builder;
+	    switch(clo.callGraphBuilder) {
 			case ZEROONE_CFA:
 				builder = new JSZeroOrOneXCFABuilder(cha, options, cache, null, null, ZeroXInstanceKeys.ALLOCATIONS, false);
 				break;
@@ -127,12 +117,18 @@ public class JSCallGraphDriver {
 				break;
 			default:
 				throw new IllegalArgumentException("Invalid call graph algorithm.");
-		}
+	    }
+	    if (clo.enableCorrelationTracking)
+	        builder.setContextSelector(
+	            new PropertyNameContextSelector(
+	                builder.getAnalysisCache(), 2, builder.getContextSelector()));
+		
+		com.ibm.wala.cast.util.Util.checkForFrontEndErrors(cha);
 		
 		/* Old code for call graph builder generation, saving for testing purposes
-		 * TODO: Disocover why new call graph builder gives different results than the one below
-		 * 
-		 * if (clo.callGraphBuilder.toString().equals("ZEROONE_CFA")) {
+		 * TODO: Discover why new call graph builder gives different results than the one below
+		 *  --- CHECK WHICH OPTIONS ARE DEFAULT IN OTHER DRIVERS*/
+		/*if (clo.callGraphBuilder.toString().equals("ZEROONE_CFA")) {
 			if (clo.handleCallApply) {
 				if(clo.enableCorrelationTracking) {
 					//builder = new JSZeroOrOneXCFABuilder(cha, options, cache, null, null, ZeroXInstanceKeys.ALLOCATIONS, false);
@@ -214,8 +210,3 @@ public class JSCallGraphDriver {
 	}
 
 }
-
-/**
- * < Application, Lcfne/Demo, main([Ljava/lang/String;)V >	invokestatic < Application, Ljava/lang/Class, forName(Ljava/lang/String;)Ljava/lang/Class; >@2	Everywhere	java.lang.Class.forName(Ljava/lang/String;)Ljava/lang/Class;	Everywhere
-<Code body of function Lprologue.js>	JSCall@186	Everywhere	Function.ctor()LRoot;	CallStringContext: [ prologue.js.do()LRoot;@186 ]
- **/
